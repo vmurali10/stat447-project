@@ -1,6 +1,6 @@
 # Analyzing the Impact of Urban Heat Islands on Public Health Outcomes
 
-**Author:** Varsha Murali, Rhea Abraham, Sanjana Addanki, Janvi Gandhi
+**Author:** Varsha Murali, Rhea Abraham, Sanjana Addanki, Janvi Gandhi, Dylan Chhay
 **Date:** 3/20/2025
 
 ## Overview
