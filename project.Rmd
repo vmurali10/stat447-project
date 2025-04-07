@@ -1,0 +1,206 @@
+---
+title: "project"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+
+data1 = read_csv("ANNUAL MEDIAN HOUSEHOLD INCOME.csv")
+
+data1 = data1 %>% 
+  select(1:4) %>% 
+  rename(ANNUAL_MEDIAN_HOUSEHOLD_INCOME = Value)
+
+data1
+```
+```{r}
+data2 = read_csv("ANNUAL NUMBER OF EMERGENCY DEPARTMENT VISITS FOR HRI.csv")
+
+data2 = data2 %>% 
+  select(1:4, 7) %>% 
+  pivot_wider(names_from = `Age Group`,
+              values_from = Value) %>% 
+  rename(ER_visits_hri_age_0_4 = `0 TO 4`) %>% 
+  rename(ER_visits_hri_age_5_14 = `5 TO 14`) %>% 
+  rename(ER_visits_hri_age_15_34 = `15 TO 34`) %>% 
+  rename(ER_visits_hri_age_35_64 = `35 TO 64`) %>% 
+  rename(ER_visits_hri_age_over_65 = `>= 65`) %>% 
+  mutate(total_ER_visits = ER_visits_hri_age_0_4 + ER_visits_hri_age_5_14 + ER_visits_hri_age_15_34 + ER_visits_hri_age_35_64 + ER_visits_hri_age_over_65)
+
+data2
+```
+```{r}
+combined_d1_d2 = inner_join(data1, data2) 
+
+combined_d1_d2_small = combined_d1_d2 %>% 
+  filter(total_ER_visits > 100)
+
+ggplot(combined_d1_d2_small, aes(x = ANNUAL_MEDIAN_HOUSEHOLD_INCOME, y = total_ER_visits)) +
+  geom_point()
+```
+```{r}
+model = lm(total_ER_visits ~ ANNUAL_MEDIAN_HOUSEHOLD_INCOME, data = combined_d1_d2_small)
+summary(model)
+
+plot(model)
+```
+
+
+# Note that we were not able to get daily data on the average temperate so we are just finding the total amount of very hot days across the year
+
+#The number of counties don't appear to change year to year
+
+
+```{r}
+data3 = read_csv("ANNUAL NUMBER OF EXTREME HEAT DAYS.csv")
+
+county_count = data3 %>%
+  distinct(State, County) %>%  
+  count(State, name = "num_counties")  
+
+joined_data = inner_join(data3, county_count) %>% 
+  mutate(across(starts_with("days_over"), ~ . / num_counties))
+
+data3_modified = data3 %>% 
+  select(1:6, 9) %>% 
+  pivot_wider(names_from = `Heat Metric"Absolute Threshold`,
+              values_from = Value) %>% 
+  rename(days_over_90_degrees = `Heat Metric: Daily Maximum Temperature"Absolute Threshold: 90 degrees F`) %>% 
+  rename(days_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 95 degrees F`) %>% 
+  rename(days_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 100 degrees F`) %>% 
+  rename(days_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 105 degrees F`) %>% 
+  group_by(State, Year) %>%
+  summarise(across(starts_with("days_over"), sum, na.rm = TRUE)) %>% 
+  left_join(joined_data %>% 
+              select(State, Year, num_counties) %>% 
+              distinct(),
+            by = c("State", "Year"))
+
+
+
+# county_summary <- data3 %>%
+#   distinct(State, Year, County) %>%
+#   count(State, Year) %>%
+#   summarize(
+#     min_counties = min(n),
+#     max_counties = max(n),
+#     equal = (min_counties == max_counties)
+#   )
+# 
+# county_summary %>% 
+#   select(equal) %>% 
+#   filter(equal == FALSE)
+
+```
+
+```{r}
+data4 = read_csv("ANNUAL NUMBER OF HOSPITLIZATIONS FOR HRI.csv")
+
+data4 = data4 %>% 
+  select(1:4, 7) %>% 
+  pivot_wider(names_from = `Age Group`,
+              values_from = Value) %>% 
+  rename(HSP_visits_age_0_4 = `0 TO 4`) %>% 
+  rename(HSP_visits_age_5_14 = `5 TO 14`) %>% 
+  rename(HSP_visits_age_15_34 = `15 TO 34`) %>% 
+  rename(HSP_visits_age_35_64 = `35 TO 64`) %>% 
+  rename(HSP_visits_age_over_65 = `>= 65`) %>% 
+  mutate(total_HS = HSP_visits_age_0_4 + HSP_visits_age_5_14 + HSP_visits_age_15_34 + HSP_visits_age_35_64 + HSP_visits_age_over_65)
+  
+```
+
+```{r}
+data5 = read_csv("ANNUAL NUMBER OF EXTREME HEAT EVENTS.csv")
+
+data5 = data5 %>% 
+  select(1:6, 9) %>% 
+  pivot_wider(names_from = `Heat Metric\"Minimum Duration Days\"Absolute Threshold`,
+              values_from = Value) %>% 
+  rename(HE_over_90_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 90 degrees F`) %>% 
+  rename(HE_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 95 degrees F`) %>% 
+  rename(HE_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 100 degrees F`) %>% 
+  rename(HE_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 105 degrees F`) %>% 
+  group_by(State, Year) %>%
+  summarise(across(starts_with("HE"), sum, na.rm = TRUE))
+  
+```
+```{r}
+combined_d1_d2_d3_d4_d5 = data1 %>% 
+  inner_join(data2, by = join_by(StateFIPS, State, Year))
+  
+  # inner_join(data2, by = join_by(StateFIPS, State, Year)) %>% 
+  # inner_join(data3, by = join_by(StateFIPS, State, Year)) %>% 
+  # inner_join(data4, by = join_by(StateFIPS, State, Year)) %>% 
+  # inner_join(data5, by = join_by(StateFIPS, State, Year)) 
+  
+combined_d1_d2_d3_d4_d5
+```
+
+
+```{r}
+data06 = read_csv("FIPS TO STATE.csv")
+data06
+```
+```{r}
+data07 = read_csv("URBAN HEAT ISLAND INTENSITY INDEX (TAKEN FROM DATA.GOV).csv")
+data07
+```
+```{r}
+library(openxlsx)
+data08 = read.xlsx("MSA TO STATE FOR UHII.xlsx")
+
+data08 = data08 %>% 
+  select(1, 9) %>% 
+  rename(State_Name = X9) %>% 
+  rename(MSA = "Table.with.row.headers.in.column.A.and.column.headers.in.row.3") %>% 
+  slice(-(1:2))
+
+data08$MSA = as.numeric(data08$MSA)
+
+data08
+```
+
+# Finding the UHII.WGHT average for each state
+
+```{r}
+data09 = inner_join(data07, data08)
+data09 
+```
+
+```{r}
+data10 = read_csv("MORTALITY FROM HRI.csv")
+
+data10 = data10 %>% 
+  select(1:4) %>% 
+  rename(mortality_HRI = Value)
+
+data10
+```
+
+```{r}
+data11 = read_csv("ANNUAL WORKER HEAT-RELATED ILLNESS CASES.csv")
+
+data11 = data11 %>% 
+  select(1:4) %>% 
+  rename(worker_HRI_cases = Value)
+
+data11
+```
+
+```{r}
+merged_data = data1 %>% 
+  inner_join(data2, by = join_by(StateFIPS, State, Year)) %>%
+  inner_join(data3_modified, by = join_by(State, Year)) %>% 
+  inner_join(data4, by = join_by(StateFIPS, State, Year)) %>% 
+  inner_join(data5, by = join_by(State, Year)) %>% 
+  inner_join(data10, by = join_by(StateFIPS, State, Year)) %>% 
+  inner_join(data11, by = join_by(StateFIPS, State, Year))
+  
+
+write_csv(merged_data, "merged_data.csv")
+```
+
+
+
+
