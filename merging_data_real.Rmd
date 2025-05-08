@@ -59,25 +59,30 @@ county_count = data3 %>%
   distinct(State, County) %>%  
   count(State, name = "num_counties")  
 
-joined_data = inner_join(data3, county_count) %>% 
-  mutate(across(starts_with("days_over"), ~ . / num_counties))
-
-data3_modified = data3 %>% 
+data3_modified <- data3 %>%
   select(1:6, 9) %>% 
-  pivot_wider(names_from = `Heat Metric"Absolute Threshold`,
-              values_from = Value) %>% 
-  rename(days_over_90_degrees = `Heat Metric: Daily Maximum Temperature"Absolute Threshold: 90 degrees F`) %>% 
-  rename(days_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 95 degrees F`) %>% 
-  rename(days_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 100 degrees F`) %>% 
-  rename(days_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 105 degrees F`) %>% 
+  pivot_wider(
+    names_from = `Heat Metric"Absolute Threshold`,
+    values_from = Value
+  ) %>%
+  rename(
+    days_over_90_degrees = `Heat Metric: Daily Maximum Temperature"Absolute Threshold: 90 degrees F`,
+    days_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 95 degrees F`,
+    days_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 100 degrees F`,
+    days_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Absolute Threshold: 105 degrees F`
+  )
+
+# Step 3: Sum across counties for each state/year
+data3_summarized <- data3_modified %>%
   group_by(State, Year) %>%
-  summarise(across(starts_with("days_over"), sum, na.rm = TRUE)) %>% 
-  left_join(joined_data %>% 
-              select(State, Year, num_counties) %>% 
-              distinct(),
-            by = c("State", "Year"))
+  summarize(across(starts_with("days_over"), sum, na.rm = TRUE), .groups = "drop")
 
+# Step 4: Join county count and divide to get average
+data3_final <- data3_summarized %>%
+  left_join(county_count, by = "State") %>%
+  mutate(across(starts_with("days_over"), ~ .x / num_counties))
 
+data3_final
 
 # county_summary <- data3 %>%
 #   distinct(State, Year, County) %>%
@@ -113,16 +118,36 @@ data4 = data4 %>%
 ```{r}
 data5 = read_csv("ANNUAL NUMBER OF EXTREME HEAT EVENTS.csv")
 
-data5 = data5 %>% 
-  select(1:6, 9) %>% 
-  pivot_wider(names_from = `Heat Metric\"Minimum Duration Days\"Absolute Threshold`,
-              values_from = Value) %>% 
-  rename(HE_over_90_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 90 degrees F`) %>% 
-  rename(HE_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 95 degrees F`) %>% 
-  rename(HE_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 100 degrees F`) %>% 
-  rename(HE_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 105 degrees F`) %>% 
+# Step 1: Count counties per state (like you did before)
+county_count <- data5 %>%
+  distinct(State, County) %>%
+  count(State, name = "num_counties")
+
+# Step 2: Pivot wider to get HE columns
+data5_wide <- data5 %>%
+  select(1:6, 9) %>%
+  pivot_wider(
+    names_from = `Heat Metric\"Minimum Duration Days\"Absolute Threshold`,
+    values_from = Value
+  ) %>%
+  rename(
+    HE_over_90_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 90 degrees F`,
+    HE_over_95_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 95 degrees F`,
+    HE_over_100_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 100 degrees F`,
+    HE_over_105_degrees = `Heat Metric: Daily Maximum Temperature\"Minimum Duration Days: 2 days\"Absolute Threshold: 105 degrees F`
+  )
+
+# Step 3: Sum across counties (per state-year)
+data5_summarized <- data5_wide %>%
   group_by(State, Year) %>%
-  summarise(across(starts_with("HE"), sum, na.rm = TRUE))
+  summarise(across(starts_with("HE_over"), sum, na.rm = TRUE), .groups = "drop")
+
+# Step 4: Average by dividing by number of counties
+data5_final <- data5_summarized %>%
+  left_join(county_count, by = "State") %>%
+  mutate(across(starts_with("HE_over"), ~ .x / num_counties))
+
+data5_final
   
 ```
 ```{r}
@@ -137,36 +162,8 @@ combined_d1_d2_d3_d4_d5 = data1 %>%
 combined_d1_d2_d3_d4_d5
 ```
 
-
-```{r}
-data06 = read_csv("FIPS TO STATE.csv")
-data06
-```
-```{r}
-data07 = read_csv("URBAN HEAT ISLAND INTENSITY INDEX (TAKEN FROM DATA.GOV).csv")
-data07
-```
-```{r}
-library(openxlsx)
-data08 = read.xlsx("MSA TO STATE FOR UHII.xlsx")
-
-data08 = data08 %>% 
-  select(1, 9) %>% 
-  rename(State_Name = X9) %>% 
-  rename(MSA = "Table.with.row.headers.in.column.A.and.column.headers.in.row.3") %>% 
-  slice(-(1:2))
-
-data08$MSA = as.numeric(data08$MSA)
-
-data08
-```
-
 # Finding the UHII.WGHT average for each state
 
-```{r}
-data09 = inner_join(data07, data08)
-data09 
-```
 
 ```{r}
 data10 = read_csv("MORTALITY FROM HRI.csv")
@@ -191,9 +188,9 @@ data11
 ```{r}
 merged_data = data1 %>% 
   inner_join(data2, by = join_by(StateFIPS, State, Year)) %>%
-  inner_join(data3_modified, by = join_by(State, Year)) %>% 
+  inner_join(data3_final, by = join_by(State, Year)) %>% 
   inner_join(data4, by = join_by(StateFIPS, State, Year)) %>% 
-  inner_join(data5, by = join_by(State, Year)) %>% 
+  inner_join(data5_final, by = join_by(State, Year)) %>% 
   inner_join(data10, by = join_by(StateFIPS, State, Year)) %>% 
   inner_join(data11, by = join_by(StateFIPS, State, Year))
   

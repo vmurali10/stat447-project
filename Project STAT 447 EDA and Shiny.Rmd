@@ -1,0 +1,331 @@
+---
+title: "ProjectStat447EDA"
+author: "Janvi"
+date: "2025-04-11"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+df <- read_csv("C:/Users/gandh/OneDrive/Desktop/Spring 2025/Stat 447/merging/merged_data_full_join.csv")
+
+# Clean object columns
+df <- df %>%
+  mutate(
+    mortality_HRI = as.numeric(na_if(mortality_HRI, "Suppressed")),
+    worker_HRI_cases = as.numeric(na_if(worker_HRI_cases, "Suppressed"))
+  )
+
+print(df)
+```
+
+Heat Map of all variables included in the datset 
+```{r}
+library(corrplot)
+selected_df <- df %>%
+  select(
+    days_over_90_degrees, days_over_95_degrees, days_over_100_degrees, days_over_105_degrees,
+    HE_over_90_degrees, HE_over_95_degrees, HE_over_100_degrees, HE_over_105_degrees,
+    ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+    total_ER_visits, total_HS, mortality_HRI, worker_HRI_cases
+  ) %>%
+  drop_na()
+
+# Correlation matrix
+cor_matrix <- cor(selected_df)
+
+# Plot heatmap
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.7)
+```
+Dark blue (~1) = strong positive correlation
+→ As one increases, the other also increases
+
+Light or white (~0) = no correlation
+
+Red (~ -1) = strong negative correlation
+→ As one increases, the other decreases
+
+Heat events over 105 degrees and mortality, total hospitalizations are pretty strongly positively correlated as shown in the heat map above 
+
+Total ER visits is strongly positively associated with worker HRI cases
+
+Median income is weakly positively associated with the total hospitalizations and worker HRI cases. 
+
+
+```{r}
+#Interactive plot for Days > 90°F
+plot_100 <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(
+    x = Year,
+    y = days_over_100_degrees,
+    color = State,
+    group = State,
+    text = paste("State:", State, "<br>Year:", Year, "<br>Days > 90°F:", days_over_100_degrees)
+  )) +
+  geom_line() +
+  labs(title = "Days Over 90°F by State", y = "Days > 100°F") +
+  theme_minimal()
+
+ggplotly(plot_100, tooltip = "text")
+
+```
+
+The plot above is interactive and dislays data on the states based on the number of days those states have a temperture above 90 degrees farenheit. It seems as if around 2012 all state temperatures peaked and there were many states with a large number of days with temperatures above 90 degrees farenheit. 
+
+```{r}
+#Interactive plot for ER Visits fir heat realated illnesses 
+library(plotly)
+library(ggplot2)
+p <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_ER_visits, color = State, group = State, text = paste("State:", State, "<br>Year:", Year, "<br>ER Visits:", total_ER_visits))) +
+  geom_line() +
+  labs(title = "ER Visits for Heat-Related Illness", y = "Total ER Visits") +
+  theme_minimal()
+
+# Make it interactive
+ggplotly(p, tooltip = "text")
+```
+
+This plot is interactive and shows the number of ER visits for each state over the years. California and Florida have the highest number of ER visits caused by heat related illnesses. California and Florida do have the highest populations in the United States. That may be the reason that they have the highest number of ER visits for heat related illnesses. 
+
+```{r}
+#Interactive plot for Hospitalization visits for heat related illnesses 
+library(plotly)
+library(ggplot2)
+ploths <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_HS, color = State, group = State, text = paste("State:", State, "<br>Year:", Year, "<br>Hospital Visits:", total_HS))) +
+  geom_line() +
+  labs(title = "Hospitlizations for Heat-Related Illness", y = "Total Hospital Visits") +
+  theme_minimal()
+
+ggplotly(ploths, tooltip = "text")
+
+```
+Similar to the plot above, this plot shows the total number of hospitlizations per state, per year for heat related illnesses. We can further filter this by ages later. Again Florida and California have the highest number of hospitalizations likely due to their population size. 
+
+```{r}
+
+#Top 2 states by days over 90 degrees farenheit 
+df %>%
+  filter(State %in% top_heat_states, Year >= 2000) %>%
+  ggplot(aes(x = Year, y = days_over_90_degrees, color = State)) +
+  geom_line(size = 1.5) +
+  geom_point() +
+  labs(
+    title = "Top 2 States by Days Over 90°F",
+    y = "Days > 90°F",
+    x = "Year",
+    color = "State"
+  ) +
+  theme_minimal()
+```
+This plot displays the top 2 states with temperatures greater than 90 degrees farenheit. Texas and Arizona have the highest count of total heat days from 2000 to 2020. 
+
+```{r}
+#Top 2 states with the most ER visits  
+top_er_states <- df %>%
+  group_by(State) %>%
+  summarize(total_er_visits = sum(total_ER_visits, na.rm = TRUE)) %>%
+  arrange(desc(total_er_visits)) %>%
+  slice_head(n = 2) %>%
+  pull(State)
+
+# Step 2: Filter and plot only those states
+df %>%
+  filter(State %in% top_er_states, Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_ER_visits, color = State)) +
+  geom_line(size = 1.5, na.rm = TRUE) +
+  geom_point(na.rm = TRUE) +
+  labs(
+    title = "Top 2 States with most ER Visits for Heat-Related Illness",
+    y = "Total ER Visits",
+    x = "Year",
+    color = "State"
+  ) +
+  theme_minimal()
+
+```
+This plot shows the top 2 states with the most er visits, being California and Florida. 
+
+Income vs Mortality: 
+```{r}
+plot_income_mortality <- ggplot(df, aes(
+  x = ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+  y = mortality_HRI,
+  text = paste("State:", State,
+               "<br>Income:", ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+               "<br>Mortality:", mortality_HRI)
+)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "Income vs. Heat-Related Mortality",
+    x = "Median Income",
+    y = "Heat-Related Deaths"
+  ) +
+  theme_minimal()
+
+ggplotly(plot_income_mortality, tooltip = "text") %>%
+  layout(showlegend = FALSE)
+```
+This plot is the distribution of income vs the mortality. Although there is not too much data on mortality, it seens that income does not have that much of a profound effect on heat related deaths. It does seem as if the income from 40,000 to 60,000 has a postive influence on heat related deaths. As income rises so do the heat related deaths for that small range. However, it is hard to make conclusions as a lot of the mortality data is not available. 
+
+Income vs Worker HRI
+```{r}
+plot_income_workerHRIcases <- ggplot(df, aes(
+  x = ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+  y = worker_HRI_cases,
+  text = paste("State:", State,
+               "<br>Income:", ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+               "<br>Worker HRI cases:", worker_HRI_cases)
+)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "Income vs. worker HRI cases",
+    x = "Median Income",
+    y = "Worker HRI cases"
+  ) +
+  theme_minimal()
+
+ggplotly(plot_income_workerHRIcases, tooltip = "text") %>%
+  layout(showlegend = FALSE)
+```
+
+Income vs worker HRI also does not seem to have much of a trend. It doesn't seem as if the income of an individual directly impacts the number worker HRI cases. However, it is hard to make conclusions because a lot of the worker HRI data has been supressed and is not available. 
+
+```{r}
+#box plot of states with days over 90 degrees temperature  
+ggplot(df, aes(x = reorder(State, -days_over_90_degrees, median), y = days_over_100_degrees)) +
+  geom_boxplot(fill = "tomato", outlier.color = "gray30") +
+  labs(title = "Distribution of Days > 90°F by State", y = "Days > 100°F", x = "State") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#histogram of the temperture over the years for all US states 
+df %>%
+  group_by(Year) %>%
+  summarize(total_days_90 = sum(days_over_90_degrees, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = total_days_90)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Total Days Over 90°F per Year (All States)", y = "Total Days") +
+  theme_minimal()
+
+```
+
+This data visual shows the total dats over 90 degrees farenhiet per year for all the states combined. Seems as if in 2012 the United States experience really hot temperatures. The box plot of the distribution of days > 90 degrees by state portrats the variance in temperatures abover 90 degrees as well as the median, IQR, and outliers for each state.
+
+```{r}
+#Maximum days of temperature over 90 degrees for each state (any year)
+df %>%
+  group_by(State) %>%
+  summarize(max_days = max(days_over_90_degrees, na.rm = TRUE)) %>%
+  arrange(desc(max_days))
+```
+This dataframe gives the max number of days with a temperature > 90 degrees for each state in any year. Texas has the highest number of days with temp > 90 degrees for the given year with max days 
+
+```{r}
+
+#Prediction using the arima model with drift and 0,1,0 as the p,d,q
+library(forecast)
+
+forecast_variable <- function(state, column, forecast_year) {
+  state_data <- df %>% filter(State == state) %>% arrange(Year)
+  ts_data <- ts(state_data[[column]], start = min(state_data$Year))
+  last_year <- max(state_data$Year)
+  steps <- forecast_year - last_year
+  
+   model <- Arima(ts_data, order = c(0, 1, 0), include.drift = TRUE)
+  fc <- forecast(model, h = steps)
+  
+  if (steps <= 0) {
+    value <- state_data[[column]][state_data$Year == forecast_year]
+    return(paste("In", state, "the actual", column, "in", forecast_year, "was:", value))
+  } else {
+    return(paste("In", state, "the forecasted", column, "in", forecast_year, "is:", round(fc$mean[steps], 0)))
+  }
+}
+
+# Example:
+forecast_variable("Texas", "days_over_90_degrees", 2027)
+```
+This dataset is a time series model which can forecast the days over ___ degrees (90, 95, 100, 105) for any state for any year. It uses an ARIMA model with p,d,q values of 1,0,1. (with upward/positive drift)
+
+```{r}
+#ordering states by the highest number of average days over 90 to the lowest 
+hottest_states <- df %>%
+  group_by(State) %>%
+  summarize(avg_days_over_90 = mean(days_over_90_degrees, na.rm = TRUE)) %>%
+  arrange(desc(avg_days_over_90))
+
+hottest_states
+
+```
+This dataset lines up the states with the largest average days over 90 degrees to the smallest average number of days over 90 degrees. Texas and Arizona have the highest number of days over 90 degrees on average.
+
+# Shiny code for forecasting 
+
+This is shiny code for forecasting where the user can choose the temperature threshhold, state, and year to find the forecasted number of days with temperatures > than ____ in a given state and year. Users can also see historical data. 
+
+*As a next step we should add the visualizations we have to this shiny app to make it interactive for the users. We can also try to predict the number of hositalizations and ER cases for the following years.
+```{r}
+library(shiny)
+library(dplyr)
+library(forecast)
+
+# UI
+ui <- fluidPage(
+  titlePanel("Forecast Extreme Heat Days by State"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("state", "Select a State:", choices = unique(df$State)),
+      selectInput("column", "Select Heat Metric:", 
+                  choices = c(
+                    "Days Over 90°F" = "days_over_90_degrees",
+                    "Days Over 95°F" = "days_over_95_degrees",
+                    "Days Over 100°F" = "days_over_100_degrees",
+                    "Days Over 105°F" = "days_over_105_degrees"
+                  )),
+      numericInput("year", "Enter Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+      actionButton("go", "Get Forecast")
+    ),
+    
+    mainPanel(
+      textOutput("forecast_result")
+    )
+  )
+)
+
+# Server
+server <- function(input, output) {
+  observeEvent(input$go, {
+    result <- tryCatch({
+      state_data <- df %>% filter(State == input$state) %>% arrange(Year)
+      last_year <- max(state_data$Year)
+      steps <- input$year - last_year
+      
+      # Check if actual value exists
+      actual_row <- state_data %>% filter(Year == input$year)
+    if (nrow(actual_row) > 0 && !is.na(actual_row[[input$column]][1])) {
+  paste("In", input$state, "the actual", input$column, "in", input$year, "was:", actual_row[[input$column]][1])
+  } else {
+        # Forecast if not available
+        ts_data <- ts(state_data[[input$column]], start = min(state_data$Year))
+        model <- Arima(ts_data, order = c(0, 1, 0), include.drift = TRUE)
+        fc <- forecast(model, h = steps)
+        paste("In", input$state, "the forecasted", input$column, "in", input$year, "is:", round(fc$mean[steps], 0))
+      }
+    }, error = function(e) {
+      paste("Error:", e$message)
+    })
+    
+    output$forecast_result <- renderText({ result })
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+```

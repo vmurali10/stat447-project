@@ -1,0 +1,843 @@
+---
+title: "ProjectStat447EDA"
+author: "Janvi"
+date: "2025-04-11"
+output: html_document
+---
+
+```{r}
+library(shiny)
+library(tidyverse)
+df <- read_csv("/Users/varshamurali/Desktop/STAT447 Project/merged_data_full_join.csv")
+
+# Clean object columns
+df <- df %>%
+  mutate(
+    mortality_HRI = as.numeric(na_if(mortality_HRI, "Suppressed")),
+    worker_HRI_cases = as.numeric(na_if(worker_HRI_cases, "Suppressed"))
+  ) %>%
+  group_by(State, Year) %>%
+  summarise(across(where(is.numeric), ~ {
+    val <- mean(.x, na.rm = TRUE)
+    if (is.nan(val)) NA else val
+  }), .groups = "drop")
+
+print(df)
+```
+
+Heat Map of all variables included in the datset 
+```{r}
+library(corrplot)
+selected_df <- df %>%
+  select(
+    days_over_90_degrees, days_over_95_degrees, days_over_100_degrees, days_over_105_degrees,
+    HE_over_90_degrees, HE_over_95_degrees, HE_over_100_degrees, HE_over_105_degrees,
+    ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+    total_ER_visits, total_HS, mortality_HRI, worker_HRI_cases
+  ) %>%
+  drop_na()
+
+# Correlation matrix
+cor_matrix <- cor(selected_df)
+
+# Plot heatmap
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.7)
+```
+Dark blue (~1) = strong positive correlation
+→ As one increases, the other also increases
+
+Light or white (~0) = no correlation
+
+Red (~ -1) = strong negative correlation
+→ As one increases, the other decreases
+
+Heat events over 105 degrees and mortality, total hospitalizations are pretty strongly positively correlated as shown in the heat map above 
+
+Total ER visits is strongly positively associated with worker HRI cases
+
+Median income is weakly positively associated with the total hospitalizations and worker HRI cases. 
+
+
+```{r}
+library(plotly)
+#Interactive plot for Days > 90°F
+plot_100 <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(
+    x = Year,
+    y = days_over_100_degrees,
+    color = State,
+    group = State,
+    text = paste("State:", State, "<br>Year:", Year, "<br>Days > 90°F:", days_over_90_degrees)
+  )) +
+  geom_line() +
+  labs(title = "Days Over 90°F by State", y = "Days > 100°F") +
+  theme_minimal()
+
+ggplotly(plot_100, tooltip = "text")
+
+```
+
+The plot above is interactive and dislays data on the states based on the number of days those states have a temperture above 90 degrees farenheit. It seems as if around 2012 all state temperatures peaked and there were many states with a large number of days with temperatures above 90 degrees farenheit. 
+
+```{r}
+#Interactive plot for ER Visits fir heat realated illnesses 
+library(plotly)
+library(ggplot2)
+p <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_ER_visits, color = State, group = State, text = paste("State:", State, "<br>Year:", Year, "<br>ER Visits:", total_ER_visits))) +
+  geom_line() +
+  labs(title = "ER Visits for Heat-Related Illness", y = "Total ER Visits") +
+  theme_minimal()
+
+# Make it interactive
+ggplotly(p, tooltip = "text")
+```
+
+This plot is interactive and shows the number of ER visits for each state over the years. California and Florida have the highest number of ER visits caused by heat related illnesses. California and Florida do have the highest populations in the United States. That may be the reason that they have the highest number of ER visits for heat related illnesses. 
+
+```{r}
+#Interactive plot for Hospitalization visits for heat related illnesses 
+library(plotly)
+library(ggplot2)
+ploths <- df %>%
+  filter(Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_HS, color = State, group = State, text = paste("State:", State, "<br>Year:", Year, "<br>Hospital Visits:", total_HS))) +
+  geom_line() +
+  labs(title = "Hospitlizations for Heat-Related Illness", y = "Total Hospital Visits") +
+  theme_minimal()
+
+ggplotly(ploths, tooltip = "text")
+
+```
+Similar to the plot above, this plot shows the total number of hospitlizations per state, per year for heat related illnesses. We can further filter this by ages later. Again Florida and California have the highest number of hospitalizations likely due to their population size. 
+
+```{r}
+
+#Top 2 states by days over 90 degrees farenheit 
+
+top_heat_states <- df %>%
+  group_by(State) %>%
+  summarise(avg_days_over_90 = mean(days_over_90_degrees, na.rm = TRUE)) %>%
+  arrange(desc(avg_days_over_90)) %>%
+  slice_head(n = 2) %>%
+  pull(State)
+
+df %>%
+  filter(State %in% top_heat_states, Year >= 2000) %>%
+  ggplot(aes(x = Year, y = days_over_90_degrees, color = State)) +
+  geom_line(size = 1.5) +
+  geom_point() +
+  labs(
+    title = "Top 2 States by Days Over 90°F",
+    y = "Days > 90°F",
+    x = "Year",
+    color = "State"
+  ) +
+  theme_minimal()
+```
+This plot displays the top 2 states with temperatures greater than 90 degrees farenheit. Texas and Arizona have the highest count of total heat days from 2000 to 2020. 
+
+```{r}
+#Top 2 states with the most ER visits  
+top_er_states <- df %>%
+  group_by(State) %>%
+  summarize(total_er_visits = sum(total_ER_visits, na.rm = TRUE)) %>%
+  arrange(desc(total_er_visits)) %>%
+  slice_head(n = 2) %>%
+  pull(State)
+
+# Step 2: Filter and plot only those states
+df %>%
+  filter(State %in% top_er_states, Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_ER_visits, color = State)) +
+  geom_line(size = 1.5, na.rm = TRUE) +
+  geom_point(na.rm = TRUE) +
+  labs(
+    title = "Top 2 States with most ER Visits for Heat-Related Illness",
+    y = "Total ER Visits",
+    x = "Year",
+    color = "State"
+  ) +
+  theme_minimal()
+
+```
+This plot shows the top 2 states with the most er visits, being California and Florida. 
+
+```{r}
+#Top 2 states with the most Hospitalization visits  
+top_hsp_states <- df %>%
+  group_by(State) %>%
+  summarize(total_HSP_visits = sum(total_HS, na.rm = TRUE)) %>%
+  arrange(desc(total_HSP_visits)) %>%
+  slice_head(n = 2) %>%
+  pull(State)
+
+# Step 2: Filter and plot only those states
+df %>%
+  filter(State %in% top_hsp_states, Year >= 2000) %>%
+  ggplot(aes(x = Year, y = total_HS, color = State)) +
+  geom_line(size = 1.5, na.rm = TRUE) +
+  geom_point(na.rm = TRUE) +
+  labs(
+    title = "Top 2 States with most hospitalizations for Heat-Related Illness",
+    y = "Total Hospitalizations",
+    x = "Year",
+    color = "State"
+  ) +
+  theme_minimal()
+
+```
+This plot displays the top 2 states with the most hospitalizations, being California and Florida 
+
+Income vs Mortality: 
+```{r}
+plot_income_mortality <- ggplot(df, aes(
+  x = ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+  y = mortality_HRI,
+  text = paste("State:", State,
+               "<br>Income:", ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+               "<br>Mortality:", mortality_HRI)
+)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "Income vs. Heat-Related Mortality",
+    x = "Median Income",
+    y = "Heat-Related Deaths"
+  ) +
+  theme_minimal()
+
+ggplotly(plot_income_mortality, tooltip = "text") %>%
+  layout(showlegend = FALSE)
+```
+This plot is the distribution of income vs the mortality. Although there is not too much data on mortality, it seens that income does not have that much of a profound effect on heat related deaths. It does seem as if the income from 40,000 to 60,000 has a postive influence on heat related deaths. As income rises so do the heat related deaths for that small range. However, it is hard to make conclusions as a lot of the mortality data is not available. 
+
+Income vs Worker HRI
+```{r}
+plot_income_workerHRIcases <- ggplot(df, aes(
+  x = ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+  y = worker_HRI_cases,
+  text = paste("State:", State,
+               "<br>Income:", ANNUAL_MEDIAN_HOUSEHOLD_INCOME,
+               "<br>Worker HRI cases:", worker_HRI_cases)
+)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "Income vs. worker HRI cases",
+    x = "Median Income",
+    y = "Worker HRI cases"
+  ) +
+  theme_minimal()
+
+ggplotly(plot_income_workerHRIcases, tooltip = "text") %>%
+  layout(showlegend = FALSE)
+```
+
+Income vs worker HRI also does not seem to have much of a trend. It doesn't seem as if the income of an individual directly impacts the number worker HRI cases. However, it is hard to make conclusions because a lot of the worker HRI data has been supressed and is not available. 
+
+```{r}
+#box plot of states with days over 90 degrees temperature  
+ggplot(df, aes(x = reorder(State, -days_over_90_degrees, median), y = days_over_100_degrees)) +
+  geom_boxplot(fill = "tomato", outlier.color = "gray30") +
+  labs(title = "Distribution of Days > 90°F by State", y = "Days > 100°F", x = "State") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#histogram of the temperture over the years for all US states 
+df %>%
+  group_by(Year) %>%
+  summarize(total_days_90 = sum(days_over_90_degrees, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = total_days_90)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Total Days Over 90°F per Year (All States)", y = "Total Days") +
+  theme_minimal()
+
+```
+
+This data visual shows the total dats over 90 degrees farenhiet per year for all the states combined. Seems as if in 2012 the United States experience really hot temperatures. The box plot of the distribution of days > 90 degrees by state portrats the variance in temperatures abover 90 degrees as well as the median, IQR, and outliers for each state.
+
+```{r}
+#Maximum days of temperature over 90 degrees for each state (any year)
+df %>%
+  group_by(State) %>%
+  summarize(max_days = max(days_over_90_degrees, na.rm = TRUE)) %>%
+  arrange(desc(max_days))
+```
+This dataframe gives the max number of days with a temperature > 90 degrees for each state in any year. Texas has the highest number of days with temp > 90 degrees for the given year with max days 
+
+```{r}
+#ordering states by the highest number of average days over 90 to the lowest 
+hottest_states <- df %>%
+  group_by(State) %>%
+  summarize(avg_days_over_90 = mean(days_over_90_degrees, na.rm = TRUE)) %>%
+  arrange(desc(avg_days_over_90))
+
+hottest_states
+
+```
+This dataset lines up the states with the largest average days over 90 degrees to the smallest average number of days over 90 degrees. Texas and Arizona have the highest number of days over 90 degrees on average.
+
+
+```{r}
+
+#Prediction using the arima model with drift and 0,1,0 as the p,d,q
+library(forecast)
+
+forecast_heat <- function(state, column, forecast_year) {
+  state_data <- df %>% filter(State == state) %>% arrange(Year)
+  ts_data <- ts(state_data[[column]], start = min(state_data$Year))
+  last_year <- max(state_data$Year)
+  steps <- forecast_year - last_year
+  if (steps <= 0) {
+    value <- state_data[[column]][state_data$Year == forecast_year]
+    return(paste("In", state, "the actual", column, "in", forecast_year, "was:", value))
+  }
+
+  if (all(is.na(ts_data))) return("No data available.")
+
+ model <- tryCatch(Arima(ts_data, order = c(0, 1, 0), include.drift = TRUE), error = function(e) NULL)
+  if (is.null(model)) return("Model fitting failed.")
+
+  fc <- tryCatch(forecast(model, h = steps), error = function(e) NULL)
+  if (is.null(fc)) return("Forecast failed.")
+  paste("In", state, "the forecasted", column, "in", forecast_year, "is:", round(fc$mean[steps]))
+}
+
+# Example:
+forecast_heat("Texas", "days_over_90_degrees", 2027)
+```
+This dataset is a time series model which can forecast the days over ___ degrees (90, 95, 100, 105) for any state for any year. It uses an ARIMA model with p,d,q values of 1,0,1. (with upward/positive drift or downward/negative drift based on the historical trend). ARIMA(1,0,1) allows for linearity which is expected in terms of temperature differences on a yearly basis.  
+
+Forecast for HRI ER and hospitalizations
+```{r}
+forecast_health <- function(state, metric, age, year) {
+  age_fmt <- ifelse(age == "65+", "over_65", gsub("-", "_", age))
+  col <- ifelse(metric == "ER", paste0("ER_visits_hri_age_", age_fmt),
+                           paste0("HSP_visits_age_", age_fmt))
+  
+  data <- df %>% filter(State == state) %>% arrange(Year)
+  
+  steps <- year - max(data$Year)
+  ts_col <- ts(data[[col]], start = min(data$Year))
+  
+  if (steps <= 0) {
+    val <- data %>% filter(Year == year) %>% pull(col)
+    return(paste("Actual", metric, "for age", age, "in", state, year, "was:", round(val)))
+  }
+
+  if (all(is.na(ts_col))) return("No data available.")
+
+  model <- tslm(ts_col ~ trend)
+  fc <- forecast(model, h = steps)
+  pred <- fc$mean[steps]
+  if (pred < 0) pred <- 0
+  paste("Forecasted", metric, "for age", age, "in", state, year, ":", round(pred))
+}
+
+forecast_health("California", "ER", "15-34", 2027)
+forecast_health("California", "HSP", "0-4", 2027)
+```
+The above model is tslm to predict the forecasted ER/Hospitalization visits for a certain age group in a particular state and particular year. ARIMA(1,0,1) did not work well for this cause these numbers dont necessarily have a linear trend. A lot of data is also unavailable due to outer join but it is alright. 
+
+# Shiny code for forecasting 
+
+This is shiny code for forecasting where the user can choose the temperature threshhold, state, and year to find the forecasted number of days with temperatures > than ____ in a given state and year. Users can also see historical data. 
+
+I have also added a forcast for health factors such as the number of ER visits or Hospitalization visits in a given year in a given state  for a given age category 
+
+*As a next step we should add the visualizations we have to this shiny app to make it interactive for the users. We have two tabs, one for the forecast for heat days and one for ER/Hospitalization forecasting. we can add different visualizations to each tab (based on the subject). For eg if we doing Income vs number of days over ___ that goes in the first tab. If we are doing Income vs number of hospitalizations, that goes in the second tab. Try to make this interactive for users. 
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Forecast Dashboard: Extreme Heat & HRI Health Outcomes"),
+  tabsetPanel(
+    tabPanel("Extreme Heat Days Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state", "Select a State:", choices = unique(df$State)),
+          selectInput("column", "Select Heat Metric:", choices = c(
+            "Days > 90°F" = "days_over_90_degrees",
+            "Days > 95°F" = "days_over_95_degrees",
+            "Days > 100°F" = "days_over_100_degrees",
+            "Days > 105°F" = "days_over_105_degrees"
+          )),
+          numericInput("year", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go", "Forecast")
+        ),
+        mainPanel(
+        textOutput("result"),
+        plotlyOutput("heat_plot"),
+        plotlyOutput("income_heat_plot_dy"),
+        plotlyOutput("workerHRI_heat_plot_dy"),
+        plotlyOutput("mortality_heat_plot_dy")
+        )
+        
+      )
+    ), 
+    
+    tabPanel("HRI ER/Hospitalizations Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state_health", "Select State:", choices = unique(df$State)),
+          selectInput("metric_health", "Select Metric:", choices = c("Emergence Room" = "ER", "Hospitalizations" = "HSP")),
+          selectInput("age_health", "Select Age Group:", choices = c("0-4", "5-14", "15-34", "35-64", "65+")),
+          numericInput("year_health", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go_health", "Get Forecast")
+        ),
+        mainPanel(textOutput("result_health"))
+      )
+    )
+  )
+)
+
+# ---- Server ----
+server <- function(input, output) {
+  observeEvent(input$go, {
+    output$result <- renderText({
+      forecast_heat(input$state, input$column, input$year)
+    })
+  })
+  
+  observeEvent(input$go_health, {
+    output$result_health <- renderText({
+      forecast_health(input$state_health, input$metric_health, input$age_health, input$year_health)
+    })
+  })
+  
+  output$heat_plot <- renderPlotly({
+  plot_90 <- df %>%
+    filter(Year >= 2000) %>%
+    ggplot(aes(
+      x = Year,
+      y = days_over_90_degrees,
+      color = State,
+      group = State,
+      text = paste("State:", State, "<br>Year:", Year, "<br>Days > 90°F:", days_over_100_degrees)
+    )) +
+    geom_line() +
+    labs(title = "Days Over 90°F by State", y = "Days > 90°F") +
+    theme_minimal()
+
+  ggplotly(plot_90, tooltip = "text")
+})
+  
+}
+
+shinyApp(ui, server)
+
+```
+```{r}
+colnames(df)
+dim(df)
+```
+```{r}
+ui <- fluidPage(
+  titlePanel("Forecast Dashboard: Extreme Heat & HRI Health Outcomes"),
+  tabsetPanel(
+    # Heat Forecast Tab
+    tabPanel("Extreme Heat Days Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state", "Select a State:", choices = unique(df$State)),
+          selectInput("column", "Select Heat Metric:", choices = c(
+            "Days > 90°F" = "days_over_90_degrees",
+            "Days > 95°F" = "days_over_95_degrees",
+            "Days > 100°F" = "days_over_100_degrees",
+            "Days > 105°F" = "days_over_105_degrees"
+          )),
+          numericInput("year", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go", "Forecast")
+        ),
+        mainPanel(
+          textOutput("result"),
+          plotlyOutput("heat_plot_dy")
+        )
+      )
+    ),
+
+    # Health Forecast Tab
+    tabPanel("HRI ER/Hospitalizations Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state_health", "Select State:", choices = unique(df$State)),
+          selectInput("metric_health", "Select Metric:", choices = c("Emergence Room" = "ER", "Hospitalizations" = "HSP")),
+          selectInput("age_health", "Select Age Group:", choices = c("0-4", "5-14", "15-34", "35-64", "65+")),
+          numericInput("year_health", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go_health", "Get Forecast")
+        ),
+        mainPanel(textOutput("result_health"),
+        plotlyOutput("health_plot_dy"),
+        plotlyOutput("income_health_plot_dy"),
+        plotlyOutput("workerHRI_health_plot_dy"),
+        plotlyOutput("mortality_health_plot_dy"))
+      )
+    )
+  )
+)
+
+server <- function(input, output) {
+  observeEvent(input$go, {
+    output$result <- renderText({
+      forecast_heat(input$state, input$column, input$year)
+    })
+  })
+
+
+  observeEvent(input$go_health, {
+    output$result_health <- renderText({
+      forecast_health(input$state_health, input$metric_health, input$age_health, input$year_health)
+    })
+  })
+
+  output$heat_plot_dy <- renderPlotly({
+    df_state <- df %>%
+      filter(State == input$state) %>%
+      select(Year, value = all_of(input$column)) %>%
+      arrange(Year)
+
+    plot <- ggplot(df_state, aes(x = Year, y = value)) +
+      geom_line(color = "firebrick", linewidth = 1.2) +
+      labs(title = paste("Heat Trend in", input$state),
+           y = input$column,
+           x = "Year") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+  
+  output$health_plot_dy <- renderPlotly({
+  req(input$state_health, input$metric_health, input$age_health)
+
+  colname <- case_when(
+    input$metric_health == "ER" & input$age_health == "0-4" ~ "ER_visits_hri_age_0_4",
+    input$metric_health == "ER" & input$age_health == "5-14" ~ "ER_visits_hri_age_5_14",
+    input$metric_health == "ER" & input$age_health == "15-34" ~ "ER_visits_hri_age_15_34",
+    input$metric_health == "ER" & input$age_health == "35-64" ~ "ER_visits_hri_age_35_64",
+    input$metric_health == "ER" & input$age_health == "65+" ~ "ER_visits_hri_age_over_65",
+    input$metric_health == "HSP" & input$age_health == "0-4" ~ "HSP_visits_age_0_4",
+    input$metric_health == "HSP" & input$age_health == "5-14" ~ "HSP_visits_age_5_14",
+    input$metric_health == "HSP" & input$age_health == "15-34" ~ "HSP_visits_age_15_34",
+    input$metric_health == "HSP" & input$age_health == "35-64" ~ "HSP_visits_age_35_64",
+    input$metric_health == "HSP" & input$age_health == "65+" ~ "HSP_visits_age_over_65",
+    TRUE ~ NA_character_
+  )
+
+  validate(need(!is.na(colname), "Invalid column selection"))
+
+  df_health <- df %>%
+    filter(State == input$state_health, Year > 2000) %>%
+    select(Year, value = all_of(colname)) %>%
+    arrange(Year)
+
+  plot_health <- ggplot(df_health, aes(x = Year, y = value)) +
+    geom_line(color = "steelblue", linewidth = 1.2) +
+    labs(title = paste(input$metric_health, "Trend in", input$state_health, "for Age", input$age_health),
+         y = input$metric_health,
+         x = "Year") +
+    theme_minimal()
+
+  ggplotly(plot_health)
+})
+}
+
+shinyApp(ui, server)
+
+```
+
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Forecast Dashboard: Extreme Heat & HRI Health Outcomes"),
+  tabsetPanel(
+    
+    # TAB 1
+    tabPanel("Extreme Heat Days Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state", "Select a State:", choices = unique(df$State)),
+          selectInput("column", "Select Heat Metric:", choices = c(
+            "Days > 90°F" = "days_over_90_degrees",
+            "Days > 95°F" = "days_over_95_degrees",
+            "Days > 100°F" = "days_over_100_degrees",
+            "Days > 105°F" = "days_over_105_degrees"
+          )),
+          numericInput("year", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go", "Forecast")
+        ),
+        mainPanel(
+          uiOutput("result"),
+          plotlyOutput("heat_plot_dy"),
+          plotlyOutput("income_heat_plot_dy"),
+          plotlyOutput("workerHRI_heat_plot_dy"),
+          plotlyOutput("mortality_heat_plot_dy")
+        )
+      )
+    ),
+
+    # TAB 2 
+    tabPanel("HRI ER/Hospitalizations Forecast",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("state_health", "Select State:", choices = unique(df$State)),
+          selectInput("metric_health", "Select Metric:", choices = c(
+            "Emergency Room" = "ER",
+            "Hospitalizations" = "HSP"
+          )),
+          selectInput("age_health", "Select Age Group:", choices = c("0-4", "5-14", "15-34", "35-64", "65+")),
+          numericInput("year_health", "Forecast Year:", value = 2027, min = min(df$Year), max = 2100),
+          actionButton("go_health", "Get Forecast")
+        ),
+        mainPanel(
+          uiOutput("result_health"),
+          plotlyOutput("health_plot_dy"),
+          plotlyOutput("income_health_plot_dy"),
+          plotlyOutput("workerHRI_health_plot_dy"),
+          plotlyOutput("mortality_health_plot_dy")
+        )
+      )
+    )
+  )
+)
+
+server <- function(input, output) {
+
+  # Heat Days Forecast Text 
+  observeEvent(input$go, {
+    output$result <- renderUI({
+      result <- forecast_heat(input$state, input$column, input$year)
+      HTML(paste0(
+        "<div style='
+          border: 2px solid #B22222;
+          border-radius: 10px;
+          padding: 12px;
+          margin-top: 10px;
+          background-color: #ffeaea;
+          color: #800000;
+          font-size: 16px;
+          font-weight: bold;
+          box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+          text-align: center;
+          width: 100%;
+          display: inline-block;
+        '>", result, "</div>"
+      ))
+    })
+  })
+
+  # Health Forecast Text 
+  observeEvent(input$go_health, {
+    output$result_health <- renderUI({
+      result <- forecast_health(input$state_health, input$metric_health, input$age_health, input$year_health)
+      HTML(paste0(
+        "<div style='
+          border: 2px solid #4682B4;
+          border-radius: 10px;
+          padding: 12px;
+          margin-top: 10px;
+          background-color: #f0f8ff;
+          color: #003366;
+          font-size: 16px;
+          font-weight: bold;
+          box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+          text-align: center;
+          width: 100%;
+          display: inline-block;
+        '>", result, "</div>"
+      ))
+    })
+  })
+
+  # Base Heat Plot (Days > X°F) 
+  output$heat_plot_dy <- renderPlotly({
+    df_state <- df %>%
+      filter(State == input$state) %>%
+      select(Year, value = all_of(input$column)) %>%
+      arrange(Year)
+
+    plot <- ggplot(df_state, aes(x = Year, y = value)) +
+      geom_line(color = "firebrick", linewidth = 1.2) +
+      labs(title = paste("Heat Trend in", input$state),
+           y = input$column, x = "Year") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+  # Base Health Plot (ER/HSP visits by age group)
+  output$health_plot_dy <- renderPlotly({
+    req(input$state_health, input$metric_health, input$age_health)
+
+    colname <- case_when(
+      input$metric_health == "ER" & input$age_health == "0-4" ~ "ER_visits_hri_age_0_4",
+      input$metric_health == "ER" & input$age_health == "5-14" ~ "ER_visits_hri_age_5_14",
+      input$metric_health == "ER" & input$age_health == "15-34" ~ "ER_visits_hri_age_15_34",
+      input$metric_health == "ER" & input$age_health == "35-64" ~ "ER_visits_hri_age_35_64",
+      input$metric_health == "ER" & input$age_health == "65+" ~ "ER_visits_hri_age_over_65",
+      input$metric_health == "HSP" & input$age_health == "0-4" ~ "HSP_visits_age_0_4",
+      input$metric_health == "HSP" & input$age_health == "5-14" ~ "HSP_visits_age_5_14",
+      input$metric_health == "HSP" & input$age_health == "15-34" ~ "HSP_visits_age_15_34",
+      input$metric_health == "HSP" & input$age_health == "35-64" ~ "HSP_visits_age_35_64",
+      input$metric_health == "HSP" & input$age_health == "65+" ~ "HSP_visits_age_over_65",
+      TRUE ~ NA_character_
+    )
+
+    df_health <- df %>%
+      filter(State == input$state_health, Year > 2000) %>%
+      select(Year, value = all_of(colname)) %>%
+      arrange(Year)
+
+    plot_health <- ggplot(df_health, aes(x = Year, y = value)) +
+      geom_line(color = "steelblue", linewidth = 1.2) +
+      labs(title = paste(input$metric_health, "Trend in", input$state_health, "for Age", input$age_health),
+           y = input$metric_health, x = "Year") +
+      theme_minimal()
+
+    ggplotly(plot_health)
+  })
+
+
+  output$income_heat_plot_dy <- renderPlotly({
+    df_income <- df %>%
+      filter(State == input$state) %>%
+      select(Year, Income = ANNUAL_MEDIAN_HOUSEHOLD_INCOME, Heat = all_of(input$column)) %>%
+      drop_na()
+
+    plot <- ggplot(df_income, aes(x = Heat, y = Income)) +
+      geom_point(color = "purple") +
+      geom_smooth(method = "lm", color = "darkred") +
+      labs(title = paste("Income vs", input$column, "in", input$state),
+           x = input$column, y = "Median Income") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+  output$workerHRI_heat_plot_dy <- renderPlotly({
+    df_hri <- df %>%
+      filter(State == input$state) %>%
+      select(Year, WorkerHRI = worker_HRI_cases, Heat = all_of(input$column)) %>%
+      drop_na()
+
+    plot <- ggplot(df_hri, aes(x = Heat, y = WorkerHRI)) +
+      geom_point(color = "steelblue") +
+      geom_smooth(method = "lm", color = "navy") +
+      labs(title = paste("Worker HRI Cases vs", input$column, "in", input$state),
+           x = input$column, y = "Worker HRI Cases") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+  output$mortality_heat_plot_dy <- renderPlotly({
+    df_mort <- df %>%
+      filter(State == input$state) %>%
+      select(Year, Mortality = mortality_HRI, Heat = all_of(input$column)) %>%
+      drop_na()
+
+    plot <- ggplot(df_mort, aes(x = Heat, y = Mortality)) +
+      geom_point(color = "firebrick") +
+      geom_smooth(method = "lm", color = "black") +
+      labs(title = paste("Mortality vs", input$column, "in", input$state),
+           x = input$column, y = "Mortality (HRI)") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+
+  output$income_health_plot_dy <- renderPlotly({
+    colname <- case_when(
+      input$metric_health == "ER" & input$age_health == "0-4" ~ "ER_visits_hri_age_0_4",
+      input$metric_health == "ER" & input$age_health == "5-14" ~ "ER_visits_hri_age_5_14",
+      input$metric_health == "ER" & input$age_health == "15-34" ~ "ER_visits_hri_age_15_34",
+      input$metric_health == "ER" & input$age_health == "35-64" ~ "ER_visits_hri_age_35_64",
+      input$metric_health == "ER" & input$age_health == "65+" ~ "ER_visits_hri_age_over_65",
+      input$metric_health == "HSP" & input$age_health == "0-4" ~ "HSP_visits_age_0_4",
+      input$metric_health == "HSP" & input$age_health == "5-14" ~ "HSP_visits_age_5_14",
+      input$metric_health == "HSP" & input$age_health == "15-34" ~ "HSP_visits_age_15_34",
+      input$metric_health == "HSP" & input$age_health == "35-64" ~ "HSP_visits_age_35_64",
+      input$metric_health == "HSP" & input$age_health == "65+" ~ "HSP_visits_age_over_65",
+      TRUE ~ NA_character_
+    )
+
+    df_income <- df %>%
+      filter(State == input$state_health) %>%
+      select(Income = ANNUAL_MEDIAN_HOUSEHOLD_INCOME, Visits = all_of(colname)) %>%
+      drop_na()
+
+    plot <- ggplot(df_income, aes(x = Income, y = Visits)) +
+      geom_point(color = "purple") +
+      geom_smooth(method = "lm", color = "darkred") +
+      labs(title = paste("Income vs", input$metric_health, "Visits in", input$state_health),
+           x = "Median Income", y = "Visits") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+  output$workerHRI_health_plot_dy <- renderPlotly({
+    colname <- case_when(
+      input$metric_health == "ER" & input$age_health == "0-4" ~ "ER_visits_hri_age_0_4",
+      input$metric_health == "ER" & input$age_health == "5-14" ~ "ER_visits_hri_age_5_14",
+      input$metric_health == "ER" & input$age_health == "15-34" ~ "ER_visits_hri_age_15_34",
+      input$metric_health == "ER" & input$age_health == "35-64" ~ "ER_visits_hri_age_35_64",
+      input$metric_health == "ER" & input$age_health == "65+" ~ "ER_visits_hri_age_over_65",
+      input$metric_health == "HSP" & input$age_health == "0-4" ~ "HSP_visits_age_0_4",
+      input$metric_health == "HSP" & input$age_health == "5-14" ~ "HSP_visits_age_5_14",
+      input$metric_health == "HSP" & input$age_health == "15-34" ~ "HSP_visits_age_15_34",
+      input$metric_health == "HSP" & input$age_health == "35-64" ~ "HSP_visits_age_35_64",
+      input$metric_health == "HSP" & input$age_health == "65+" ~ "HSP_visits_age_over_65",
+      TRUE ~ NA_character_
+    )
+
+    df_hri <- df %>%
+      filter(State == input$state_health) %>%
+      select(WorkerHRI = worker_HRI_cases, Visits = all_of(colname)) %>%
+      drop_na()
+
+    plot <- ggplot(df_hri, aes(x = WorkerHRI, y = Visits)) +
+      geom_point(color = "steelblue") +
+      geom_smooth(method = "lm", color = "navy") +
+      labs(title = paste("Worker HRI vs", input$metric_health, "Visits in", input$state_health),
+           x = "Worker HRI Cases", y = "Visits") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+  output$mortality_health_plot_dy <- renderPlotly({
+    colname <- case_when(
+      input$metric_health == "ER" & input$age_health == "0-4" ~ "ER_visits_hri_age_0_4",
+      input$metric_health == "ER" & input$age_health == "5-14" ~ "ER_visits_hri_age_5_14",
+      input$metric_health == "ER" & input$age_health == "15-34" ~ "ER_visits_hri_age_15_34",
+      input$metric_health == "ER" & input$age_health == "35-64" ~ "ER_visits_hri_age_35_64",
+      input$metric_health == "ER" & input$age_health == "65+" ~ "ER_visits_hri_age_over_65",
+      input$metric_health == "HSP" & input$age_health == "0-4" ~ "HSP_visits_age_0_4",
+      input$metric_health == "HSP" & input$age_health == "5-14" ~ "HSP_visits_age_5_14",
+      input$metric_health == "HSP" & input$age_health == "15-34" ~ "HSP_visits_age_15_34",
+      input$metric_health == "HSP" & input$age_health == "35-64" ~ "HSP_visits_age_35_64",
+      input$metric_health == "HSP" & input$age_health == "65+" ~ "HSP_visits_age_over_65",
+      TRUE ~ NA_character_
+    )
+
+    df_mort <- df %>%
+      filter(State == input$state_health) %>%
+      select(Mortality = mortality_HRI, Visits = all_of(colname)) %>%
+      drop_na()
+
+    plot <- ggplot(df_mort, aes(x = Mortality, y = Visits)) +
+      geom_point(color = "firebrick") +
+      geom_smooth(method = "lm", color = "black") +
+      labs(title = paste("Mortality vs", input$metric_health, "Visits in", input$state_health),
+           x = "Mortality (HRI)", y = "Visits") +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+
+}
+
+shinyApp(ui, server)
+```
